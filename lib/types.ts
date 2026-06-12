@@ -1,5 +1,10 @@
 export type SignalSource = "GitHub" | "Slack" | "Discussion" | "Docs";
 
+export type IntegrationSource =
+  | SignalSource
+  | "Support"
+  | "Notion";
+
 export type SignalType =
   | "Issue"
   | "Message"
@@ -32,7 +37,7 @@ export type SyncStatus = "idle" | "syncing" | "complete" | "failed";
 
 export type SyncMetadata = {
   id: string;
-  source: Exclude<SignalSource, "Docs">;
+  source: SignalSource;
   status: SyncStatus;
   lastSyncAt: string;
   recordsSynced: number;
@@ -173,8 +178,81 @@ export type PullRequestDraft = {
 export type LearnedProcedure = {
   id: string;
   repo: string;
+  canonicalIssueId?: string;
   patternName: string;
   procedureSummary: string;
   successCount: number;
   lastVerifiedAt: string;
+};
+
+export type OnboardingConfig = {
+  githubConnected: boolean;
+  selectedRepo: string;
+  connectedSources: IntegrationSource[];
+  focus: string;
+  permissions: string[];
+  monitoringStartedAt?: string;
+};
+
+export type LocalIssueState = {
+  status?: IssueStatus;
+  priority?: Priority;
+  runStatus?: AgentRun["status"];
+  prStatus?: PullRequestDraft["status"];
+  assignedAt?: string;
+  lastActionAt?: string;
+};
+
+export type LocalAppState = {
+  onboarding: OnboardingConfig;
+  issueState: Record<string, LocalIssueState>;
+  extraSignals: Signal[];
+  hiddenSignalIds: string[];
+  lastManualSyncAt?: string;
+};
+
+export type AgentHealth = {
+  name: string;
+  status: "idle" | "running" | "complete";
+  logCount: number;
+};
+
+export type DashboardRuntime = {
+  repo: string;
+  onboarding: OnboardingConfig;
+  signals: Signal[];
+  syncResults: Array<{
+    source: SignalSource;
+    status: SyncStatus;
+    lastSyncAt: string;
+    records: Signal[];
+    metadata: SyncMetadata;
+  }>;
+  syncMetadata: SyncMetadata[];
+  canonicalIssues: CanonicalIssue[];
+  agentRuns: AgentRun[];
+  agentSteps: AgentStep[];
+  validationArtifacts: ValidationArtifact[];
+  pullRequestDrafts: PullRequestDraft[];
+  learnedProcedures: LearnedProcedure[];
+  agents: AgentHealth[];
+  metrics: ClickHouseMetrics;
+  timeline: AgentTimelineEntry[];
+};
+
+export type IssueWorkspace = {
+  issue: CanonicalIssue;
+  sources: Signal[];
+  run: AgentRun;
+  steps: AgentStep[];
+  artifacts: ValidationArtifact[];
+  pr?: PullRequestDraft;
+  learnedProcedure?: LearnedProcedure;
+  traceTimeline: {
+    trace?: Trace;
+    spans: TraceSpan[];
+    toolCalls: ToolCall[];
+    evaluations: Evaluation[];
+  };
+  agentTimeline: AgentTimelineEntry[];
 };

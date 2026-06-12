@@ -1,5 +1,5 @@
 import { signals as seedSignals } from "@/lib/mock-data";
-import type { Signal, SignalSource, SyncMetadata } from "@/lib/types";
+import type { IntegrationSource, Signal, SignalSource, SyncMetadata } from "@/lib/types";
 import { insertSignal } from "@/services/clickhouse";
 import { storeSyncMetadata, upsertSignals } from "@/services/signal-store";
 
@@ -60,8 +60,25 @@ export function syncSlackSignals() {
   return syncSource("Slack", (signal) => signal.source === "Slack");
 }
 
+export function syncDocsFeedback() {
+  return syncSource("Docs", (signal) => signal.source === "Docs");
+}
+
+export function syncSelectedSources(sources: IntegrationSource[]) {
+  const selected = new Set(sources);
+  const results: AirbyteSyncResult[] = [];
+
+  if (selected.has("GitHub")) results.push(syncGithubIssues());
+  if (selected.has("Discussion")) results.push(syncGithubDiscussions());
+  if (selected.has("Slack") || selected.has("Support")) results.push(syncSlackSignals());
+  if (selected.has("Docs")) results.push(syncDocsFeedback());
+
+  return results;
+}
+
 export const airbyteSources: Array<{ source: SignalSource; label: string }> = [
   { source: "GitHub", label: "GitHub Issues" },
   { source: "Discussion", label: "GitHub Discussions" },
   { source: "Slack", label: "Slack" },
+  { source: "Docs", label: "Documentation feedback" },
 ];

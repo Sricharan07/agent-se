@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { SourceIcon } from "@/components/dashboard/source-icon";
-import type { Signal, SyncMetadata } from "@/lib/types";
+import type { Signal, SignalSource, SyncMetadata } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function SignalFeed({
@@ -15,20 +16,51 @@ export function SignalFeed({
   selectedSignalIds: string[];
   syncMetadata: SyncMetadata[];
 }) {
+  const [sourceFilter, setSourceFilter] = useState<SignalSource | "All">("All");
+  const [query, setQuery] = useState("");
   const sourceCounts = signals.reduce<Record<string, number>>((acc, signal) => {
     acc[signal.source] = (acc[signal.source] ?? 0) + 1;
     return acc;
   }, {});
+  const filteredSignals = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return signals.filter((signal) => {
+      const matchesSource = sourceFilter === "All" || signal.source === sourceFilter;
+      const matchesQuery =
+        !normalizedQuery ||
+        [signal.sourceRef, signal.repo, signal.text, signal.author, signal.metadata.module, signal.metadata.impact]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery);
+      return matchesSource && matchesQuery;
+    });
+  }, [query, signals, sourceFilter]);
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex gap-2 overflow-x-auto border-b border-border px-5 py-4">
-        <Badge tone="default">All ({signals.length})</Badge>
+        <button onClick={() => setSourceFilter("All")}>
+          <Badge tone={sourceFilter === "All" ? "default" : "muted"}>All ({signals.length})</Badge>
+        </button>
         {Object.entries(sourceCounts).map(([source, count]) => (
-          <Badge key={source} tone="muted">
-            {source} ({count})
-          </Badge>
+          <button key={source} onClick={() => setSourceFilter(source as SignalSource)}>
+            <Badge tone={sourceFilter === source ? "default" : "muted"}>
+              {source} ({count})
+            </Badge>
+          </button>
         ))}
+      </div>
+
+      <div className="border-b border-border px-5 py-4">
+        <label className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground">
+          <Search className="h-4 w-4" aria-hidden="true" />
+          <input
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+            placeholder="Search signals"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
       </div>
 
       <div className="grid gap-2 border-b border-border px-5 py-4">
@@ -46,7 +78,7 @@ export function SignalFeed({
       </div>
 
       <div className="flex flex-col gap-3 p-5">
-        {signals.map((signal) => {
+        {filteredSignals.map((signal) => {
           const isClustered = selectedSignalIds.includes(signal.id);
 
           return (
@@ -80,6 +112,11 @@ export function SignalFeed({
             </article>
           );
         })}
+        {filteredSignals.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+            No signals match this filter.
+          </div>
+        ) : null}
       </div>
     </div>
   );

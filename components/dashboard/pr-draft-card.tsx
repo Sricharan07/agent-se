@@ -1,4 +1,5 @@
 import { ExternalLink, GitPullRequestDraft } from "lucide-react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PullRequestDraft } from "@/lib/types";
@@ -19,10 +20,21 @@ export function PrDraftCard({ draft }: { draft?: PullRequestDraft }) {
                 "The PR agent is waiting for final validation before publishing a draft pull request."}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" disabled={!draft}>
-                Open on GitHub
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              </Button>
+              {draft ? (
+                <Link
+                  className="focus-ring inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border bg-white px-3 text-sm font-medium text-black transition-colors hover:bg-muted"
+                  href={draft.prUrl}
+                  target="_blank"
+                >
+                  Open on GitHub
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </Link>
+              ) : (
+                <Button variant="outline" size="sm" disabled>
+                  Open on GitHub
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </Button>
+              )}
               <Button variant="ghost" size="sm">
                 View diff summary
               </Button>

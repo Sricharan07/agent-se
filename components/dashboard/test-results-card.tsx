@@ -30,6 +30,11 @@ export function TestResultsCard({ artifacts }: { artifacts: ValidationArtifact[]
             </div>
           </div>
         ))}
+        {artifacts.length === 0 ? (
+          <div className="px-4 py-5 text-sm leading-5 text-muted-foreground">
+            Validation has not started for this canonical issue yet.
+          </div>
+        ) : null}
       </div>
     </section>
   );

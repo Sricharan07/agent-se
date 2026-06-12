@@ -1,9 +1,11 @@
 import { SiteFrame } from "@/components/shared/site-frame";
 import { Badge } from "@/components/ui/badge";
-import { getSponsorRuntime } from "@/lib/sponsor-runtime";
+import { refreshSponsorRuntime } from "@/lib/sponsor-runtime";
+
+export const dynamic = "force-dynamic";
 
 export default function MetricsPage() {
-  const { metrics, agents } = getSponsorRuntime();
+  const { metrics, agents } = refreshSponsorRuntime();
   const rows = [
     {
       label: "Signals ingested",

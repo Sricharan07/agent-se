@@ -10,16 +10,18 @@ import {
   Github,
   Inbox,
   LockKeyhole,
-  MessageSquare,
   Search,
   ShieldCheck,
   Slack,
   Sparkle,
 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { saveOnboarding } from "@/components/dashboard/data-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import type { IntegrationSource } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const steps = ["Connect GitHub", "Select Repository", "Configure Sources", "Review & Start"];
@@ -32,30 +34,56 @@ const repositories = [
   { name: "acme / docs-site", updated: "Updated 1w ago", visibility: "Public" },
 ];
 
-const sourceOptions = [
-  { name: "GitHub Issues", detail: "Pull issues from the repository", icon: Github, connected: true },
-  { name: "GitHub Discussions", detail: "Monitor discussions and ideas", icon: Github, connected: true },
-  { name: "Slack", detail: "Collect feedback from channels", icon: Slack, connected: true },
-  { name: "Documentation", detail: "Ingest docs to improve understanding", icon: FileText, connected: false },
-  { name: "Support Inbox", detail: "Import customer reports", icon: Inbox, connected: false },
-  { name: "Notion", detail: "Ingest project notes and specs", icon: FileText, connected: false },
+const sourceOptions: Array<{
+  id: IntegrationSource;
+  name: string;
+  detail: string;
+  icon: typeof Github;
+  defaultConnected: boolean;
+}> = [
+  { id: "GitHub", name: "GitHub Issues", detail: "Pull issues from the repository", icon: Github, defaultConnected: true },
+  { id: "Discussion", name: "GitHub Discussions", detail: "Monitor discussions and ideas", icon: Github, defaultConnected: true },
+  { id: "Slack", name: "Slack", detail: "Collect feedback from channels", icon: Slack, defaultConnected: true },
+  { id: "Docs", name: "Documentation", detail: "Ingest docs feedback and product signals", icon: FileText, defaultConnected: true },
+  { id: "Support", name: "Support Inbox", detail: "Import customer reports through the Slack facade", icon: Inbox, defaultConnected: false },
+  { id: "Notion", name: "Notion", detail: "Capture project notes when an integration is added", icon: FileText, defaultConnected: false },
 ];
 
 const focusOptions = ["Bugs", "Feature Requests", "Performance", "Docs", "Code Quality", "Other"];
 
 export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
+  const [githubConnected, setGithubConnected] = useState(true);
   const [selectedRepo, setSelectedRepo] = useState(repositories[0].name);
   const [focus, setFocus] = useState("Bugs");
+  const [connectedSourceIds, setConnectedSourceIds] = useState<IntegrationSource[]>(
+    sourceOptions.filter((source) => source.defaultConnected).map((source) => source.id),
+  );
 
   const connectedSources = useMemo(
-    () => sourceOptions.filter((source) => source.connected).map((source) => source.name),
-    [],
+    () => sourceOptions.filter((source) => connectedSourceIds.includes(source.id)).map((source) => source.name),
+    [connectedSourceIds],
   );
+  const onboardingMutation = useMutation({
+    mutationFn: () =>
+      saveOnboarding({
+        githubConnected,
+        selectedRepo,
+        connectedSources: connectedSourceIds,
+        focus,
+        permissions: ["Read", "Analyze", "Draft PRs", "Comment"],
+        monitoringStartedAt: new Date().toISOString(),
+      }),
+    onSuccess: (result) => {
+      queryClient.setQueryData(["ase-dashboard"], result.runtime);
+      onComplete();
+    },
+  });
 
   function continueFlow() {
     if (step === steps.length - 1) {
-      onComplete();
+      onboardingMutation.mutate();
       return;
     }
 
@@ -75,11 +103,24 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         <StepIndicator currentStep={step} />
 
         <Card className="min-h-[520px] p-6 shadow-subtle">
-          {step === 0 ? <ConnectStep /> : null}
+          {step === 0 ? <ConnectStep connected={githubConnected} onConnect={() => setGithubConnected(true)} /> : null}
           {step === 1 ? (
             <RepositoryStep selectedRepo={selectedRepo} onSelectRepo={setSelectedRepo} />
           ) : null}
-          {step === 2 ? <SourcesStep focus={focus} onFocusChange={setFocus} /> : null}
+          {step === 2 ? (
+            <SourcesStep
+              connectedSources={connectedSourceIds}
+              focus={focus}
+              onFocusChange={setFocus}
+              onToggleSource={(sourceId) =>
+                setConnectedSourceIds((current) =>
+                  current.includes(sourceId)
+                    ? current.filter((candidate) => candidate !== sourceId)
+                    : [...current, sourceId],
+                )
+              }
+            />
+          ) : null}
           {step === 3 ? (
             <ReviewStep selectedRepo={selectedRepo} connectedSources={connectedSources} focus={focus} />
           ) : null}
@@ -93,8 +134,12 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back
             </Button>
-            <Button onClick={continueFlow}>
-              {step === steps.length - 1 ? "Start autonomous monitoring" : "Continue"}
+            <Button onClick={continueFlow} disabled={onboardingMutation.isPending}>
+              {step === steps.length - 1
+                ? onboardingMutation.isPending
+                  ? "Starting..."
+                  : "Start autonomous monitoring"
+                : "Continue"}
               {step === steps.length - 1 ? (
                 <Sparkle className="h-4 w-4" aria-hidden="true" />
               ) : (
@@ -138,7 +183,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
   );
 }
 
-function ConnectStep() {
+function ConnectStep({ connected, onConnect }: { connected: boolean; onConnect: () => void }) {
   return (
     <div className="grid min-h-[420px] items-center gap-10 lg:grid-cols-[1fr_0.95fr]">
       <div className="flex items-center justify-center">
@@ -160,9 +205,9 @@ function ConnectStep() {
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           We will use GitHub to access repositories, issues, discussions, and code with your permissions.
         </p>
-        <Button className="mt-8">
+        <Button className="mt-8" variant={connected ? "outline" : "default"} onClick={onConnect}>
           <Github className="h-4 w-4" aria-hidden="true" />
-          Continue with GitHub
+          {connected ? "GitHub connected" : "Continue with GitHub"}
         </Button>
         <p className="mt-8 flex max-w-xs items-start gap-3 text-xs leading-5 text-muted-foreground">
           <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -238,7 +283,17 @@ function RepositoryStep({
   );
 }
 
-function SourcesStep({ focus, onFocusChange }: { focus: string; onFocusChange: (focus: string) => void }) {
+function SourcesStep({
+  connectedSources,
+  focus,
+  onFocusChange,
+  onToggleSource,
+}: {
+  connectedSources: IntegrationSource[];
+  focus: string;
+  onFocusChange: (focus: string) => void;
+  onToggleSource: (source: IntegrationSource) => void;
+}) {
   return (
     <div className="mx-auto w-full max-w-5xl">
       <h2 className="text-2xl font-semibold">Configure sources</h2>
@@ -247,8 +302,18 @@ function SourcesStep({ focus, onFocusChange }: { focus: string; onFocusChange: (
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {sourceOptions.map((source) => (
-          <div key={source.name} className="flex items-center justify-between rounded-lg border border-border p-4">
+        {sourceOptions.map((source) => {
+          const connected = connectedSources.includes(source.id);
+
+          return (
+          <button
+            key={source.name}
+            className={cn(
+              "focus-ring flex items-center justify-between rounded-lg border p-4 text-left transition-colors hover:bg-muted",
+              connected ? "border-black" : "border-border",
+            )}
+            onClick={() => onToggleSource(source.id)}
+          >
             <div className="flex min-w-0 items-center gap-4">
               <source.icon className="h-7 w-7 shrink-0" aria-hidden="true" />
               <div>
@@ -257,18 +322,19 @@ function SourcesStep({ focus, onFocusChange }: { focus: string; onFocusChange: (
               </div>
             </div>
             <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-              {source.connected ? "Connected" : "Optional"}
+              {connected ? "Connected" : "Optional"}
               <span
                 className={cn(
                   "grid h-5 w-5 place-items-center rounded-full border",
-                  source.connected ? "border-black" : "border-neutral-300",
+                  connected ? "border-black" : "border-neutral-300",
                 )}
               >
-                {source.connected ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
+                {connected ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
               </span>
             </span>
-          </div>
-        ))}
+          </button>
+          );
+        })}
       </div>
 
       <div className="mt-8">

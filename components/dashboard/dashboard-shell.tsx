@@ -14,6 +14,7 @@ import {
   Sparkle,
   Workflow,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { MetricsSummaryCards } from "@/components/dashboard/metrics-summary-card
 import { SignalFeed } from "@/components/dashboard/signal-feed";
 import { CanonicalIssueList } from "@/components/dashboard/canonical-issue-list";
 import { IssueDetailWorkspace } from "@/components/dashboard/issue-detail-workspace";
-import { useDashboardData } from "@/components/dashboard/data-client";
+import { syncNow, useDashboardData } from "@/components/dashboard/data-client";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -35,13 +36,26 @@ const navItems = [
 ];
 
 export function DashboardShell({ onRestartOnboarding }: { onRestartOnboarding: () => void }) {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useDashboardData();
   const [selectedIssueId, setSelectedIssueId] = useState("SE-1024");
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const selectedIssue = useMemo(
     () => data?.canonicalIssues.find((issue) => issue.id === selectedIssueId) ?? data?.canonicalIssues[0],
     [data?.canonicalIssues, selectedIssueId],
   );
+
+  async function handleSync() {
+    setIsSyncing(true);
+    try {
+      const runtime = await syncNow();
+      queryClient.setQueryData(["ase-dashboard"], runtime);
+      await queryClient.invalidateQueries({ queryKey: ["ase-workspace"] });
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   if (isLoading || !data || !selectedIssue) {
     return (
@@ -76,6 +90,9 @@ export function DashboardShell({ onRestartOnboarding }: { onRestartOnboarding: (
               <span className="h-2 w-2 rounded-full bg-black" />
               Agent online
             </span>
+            <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing}>
+              {isSyncing ? "Syncing" : "Sync now"}
+            </Button>
             <Button variant="outline" size="sm" onClick={onRestartOnboarding}>
               Setup
             </Button>

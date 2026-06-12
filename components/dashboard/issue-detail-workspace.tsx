@@ -1,9 +1,10 @@
 "use client";
 
 import { ExternalLink, GitMerge, ShieldCheck } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AgentTimelinePanel } from "@/components/dashboard/agent-timeline-panel";
 import { AgentLogTimeline } from "@/components/dashboard/agent-log-timeline";
-import { getIssueWorkspace } from "@/components/dashboard/data-client";
+import { publishDraftPr, startAgentRun, useIssueWorkspace } from "@/components/dashboard/data-client";
 import { SourceIcon } from "@/components/dashboard/source-icon";
 import { PrDraftCard } from "@/components/dashboard/pr-draft-card";
 import { TestResultsCard } from "@/components/dashboard/test-results-card";
@@ -12,6 +13,39 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function IssueDetailWorkspace({ issueId }: { issueId: string }) {
+  const queryClient = useQueryClient();
+  const { data, isError, isLoading } = useIssueWorkspace(issueId);
+  const runMutation = useMutation({
+    mutationFn: () => startAgentRun(issueId),
+    onSuccess: (workspace) => {
+      queryClient.setQueryData(["ase-workspace", issueId], workspace);
+      queryClient.invalidateQueries({ queryKey: ["ase-dashboard"] });
+    },
+  });
+  const prMutation = useMutation({
+    mutationFn: () => publishDraftPr(issueId),
+    onSuccess: (workspace) => {
+      queryClient.setQueryData(["ase-workspace", issueId], workspace);
+      queryClient.invalidateQueries({ queryKey: ["ase-dashboard"] });
+    },
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div className="grid min-h-[420px] place-items-center text-sm text-muted-foreground">
+        Loading issue workspace...
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="m-5 rounded-lg border border-border p-6 text-sm text-muted-foreground">
+        Could not load this workspace. Try syncing again.
+      </div>
+    );
+  }
+
   const {
     issue,
     sources,
@@ -22,7 +56,7 @@ export function IssueDetailWorkspace({ issueId }: { issueId: string }) {
     learnedProcedure,
     traceTimeline,
     agentTimeline,
-  } = getIssueWorkspace(issueId);
+  } = data;
 
   return (
     <div className="flex flex-col">
@@ -43,6 +77,28 @@ export function IssueDetailWorkspace({ issueId }: { issueId: string }) {
               <span>{Math.round(issue.confidence * 100)}% cluster confidence</span>
             </div>
             <p className="mt-6 max-w-2xl text-sm leading-6 text-muted-foreground">{issue.summary}</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button
+                variant={run.status === "Running" ? "outline" : "default"}
+                size="sm"
+                onClick={() => runMutation.mutate()}
+                disabled={runMutation.isPending || run.status === "Running"}
+              >
+                {run.status === "Running"
+                  ? "Agent running"
+                  : runMutation.isPending
+                    ? "Starting..."
+                    : "Start agent run"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => prMutation.mutate()}
+                disabled={prMutation.isPending || issue.status === "Draft PR"}
+              >
+                {issue.status === "Draft PR" ? "Draft PR created" : prMutation.isPending ? "Publishing..." : "Create draft PR"}
+              </Button>
+            </div>
           </div>
 
           <div className="w-full rounded-lg border border-border p-4 2xl:max-w-sm">
@@ -116,8 +172,7 @@ export function IssueDetailWorkspace({ issueId }: { issueId: string }) {
             </div>
             <div className="p-4">
               <p className="text-sm leading-6 text-muted-foreground">
-                Batch facet hydration in `SearchService.getResults`, reuse the existing large-index fixture,
-                and enforce query-count limits before publishing the draft PR.
+                {pr?.diffSummary ?? proposedChangeFor(issue.id)}
               </p>
             </div>
           </section>
@@ -133,9 +188,12 @@ export function IssueDetailWorkspace({ issueId }: { issueId: string }) {
               <div className="flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
                 <div>
-                  <div className="text-sm font-medium">{learnedProcedure.patternName}</div>
+                  <div className="text-sm font-medium">
+                    {learnedProcedure?.patternName ?? "No learned procedure yet"}
+                  </div>
                   <p className="mt-2 text-sm leading-5 text-muted-foreground">
-                    {learnedProcedure.procedureSummary}
+                    {learnedProcedure?.procedureSummary ??
+                      "The learning layer will store reusable procedures after this run has enough validation evidence."}
                   </p>
                   <Button className="mt-4" variant="outline" size="sm">
                     View procedure
@@ -149,4 +207,20 @@ export function IssueDetailWorkspace({ issueId }: { issueId: string }) {
       </section>
     </div>
   );
+}
+
+function proposedChangeFor(issueId: string) {
+  if (issueId === "SE-1024") {
+    return "Batch facet hydration in SearchService.getResults, reuse the existing large-index fixture, and enforce query-count limits before publishing the draft PR.";
+  }
+  if (issueId === "SE-1025") {
+    return "Add date range state to the search UI, send the selected range to the search API, and include it in export requests.";
+  }
+  if (issueId === "SE-1026") {
+    return "Move exact-match boost earlier in the ranking pipeline and add snapshot coverage for short exact queries.";
+  }
+  if (issueId === "SE-1027") {
+    return "Preserve the last good index snapshot until the refresh job passes health checks, then update stale-record regression coverage.";
+  }
+  return "Prepare a targeted patch, regression test, and draft PR evidence bundle for this canonical issue.";
 }

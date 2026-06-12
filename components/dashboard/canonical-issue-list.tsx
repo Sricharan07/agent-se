@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, CircleDashed, GitMerge, Timer } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleDashed, GitMerge, Search, Timer } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import type { CanonicalIssue } from "@/lib/types";
+import type { CanonicalIssue, IssueStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function CanonicalIssueList({
@@ -15,22 +16,64 @@ export function CanonicalIssueList({
   selectedIssueId: string;
   onSelectIssue: (issueId: string) => void;
 }) {
+  const [statusFilter, setStatusFilter] = useState<IssueStatus | "All">("All");
+  const [query, setQuery] = useState("");
   const statusCounts = issues.reduce<Record<string, number>>((acc, issue) => {
     acc[issue.status] = (acc[issue.status] ?? 0) + 1;
     return acc;
   }, {});
+  const filteredIssues = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return issues.filter((issue) => {
+      const matchesStatus = statusFilter === "All" || issue.status === statusFilter;
+      const matchesQuery =
+        !normalizedQuery ||
+        [issue.id, issue.title, issue.summary, issue.affectedArea, issue.priority, issue.status]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery);
+      return matchesStatus && matchesQuery;
+    });
+  }, [issues, query, statusFilter]);
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex gap-2 overflow-x-auto border-b border-border px-5 py-4">
-        <Badge tone="default">New ({statusCounts.New ?? 0})</Badge>
-        <Badge tone="muted">Triaged ({statusCounts.Triaged ?? 0})</Badge>
-        <Badge tone="muted">In Progress ({statusCounts.Investigating ?? 0})</Badge>
-        <Badge tone="muted">Draft PR ({statusCounts["Draft PR"] ?? 0})</Badge>
+        <button onClick={() => setStatusFilter("All")}>
+          <Badge tone={statusFilter === "All" ? "default" : "muted"}>All ({issues.length})</Badge>
+        </button>
+        <StatusFilterButton count={statusCounts.New ?? 0} filter="New" label="New" selected={statusFilter} onSelect={setStatusFilter} />
+        <StatusFilterButton count={statusCounts.Triaged ?? 0} filter="Triaged" label="Triaged" selected={statusFilter} onSelect={setStatusFilter} />
+        <StatusFilterButton
+          count={statusCounts.Investigating ?? 0}
+          filter="Investigating"
+          label="In Progress"
+          selected={statusFilter}
+          onSelect={setStatusFilter}
+        />
+        <StatusFilterButton
+          count={statusCounts["Draft PR"] ?? 0}
+          filter="Draft PR"
+          label="Draft PR"
+          selected={statusFilter}
+          onSelect={setStatusFilter}
+        />
+      </div>
+
+      <div className="border-b border-border px-5 py-4">
+        <label className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground">
+          <Search className="h-4 w-4" aria-hidden="true" />
+          <input
+            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+            placeholder="Search issues"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
       </div>
 
       <div className="flex flex-col gap-3 p-5">
-        {issues.map((issue) => {
+        {filteredIssues.map((issue) => {
           const selected = issue.id === selectedIssueId;
 
           return (
@@ -76,8 +119,35 @@ export function CanonicalIssueList({
             </button>
           );
         })}
+        {filteredIssues.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+            No canonical issues match this filter.
+          </div>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function StatusFilterButton({
+  count,
+  filter,
+  label,
+  selected,
+  onSelect,
+}: {
+  count: number;
+  filter: IssueStatus;
+  label: string;
+  selected: IssueStatus | "All";
+  onSelect: (filter: IssueStatus) => void;
+}) {
+  return (
+    <button onClick={() => onSelect(filter)}>
+      <Badge tone={selected === filter ? "default" : "muted"}>
+        {label} ({count})
+      </Badge>
+    </button>
   );
 }
 

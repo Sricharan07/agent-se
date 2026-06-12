@@ -1,22 +1,27 @@
 import { buildAgentTimeline, getIssueSourcesFromStore, runGuildAgentTeam } from "@/agents";
-import { syncGithubDiscussions, syncGithubIssues, syncSlackSignals } from "@/services/airbyte";
+import { syncSelectedSources } from "@/services/airbyte";
 import { getClickHouseMetrics, resetClickHouse } from "@/services/clickhouse";
+import { clusterSignals } from "@/services/dedup";
 import { getTraceTimeline, resetLangfuse } from "@/services/langfuse";
+import { readLocalState } from "@/services/local-state";
 import { listSignals, listSyncMetadata, resetSignalStore } from "@/services/signal-store";
-import type { CanonicalIssue } from "@/lib/types";
+import type { CanonicalIssue, DashboardRuntime, IssueWorkspace } from "@/lib/types";
 
-export function buildSponsorRuntime() {
+export function buildSponsorRuntime(): DashboardRuntime {
+  const state = readLocalState();
   resetSignalStore();
   resetClickHouse();
   resetLangfuse();
 
-  const syncResults = [syncGithubIssues(), syncGithubDiscussions(), syncSlackSignals()];
+  const syncResults = syncSelectedSources(state.onboarding.connectedSources);
   const signals = listSignals();
-  const guildRun = runGuildAgentTeam(signals);
+  const canonicalIssues = clusterSignals(signals, state);
+  const guildRun = runGuildAgentTeam(signals, canonicalIssues, state);
   const metrics = getClickHouseMetrics();
 
   return {
-    repo: "acme/search-service",
+    repo: state.onboarding.selectedRepo.replace(" / ", "/"),
+    onboarding: state.onboarding,
     signals,
     syncResults,
     syncMetadata: listSyncMetadata(),
@@ -48,7 +53,7 @@ export function refreshSponsorRuntime() {
   return sponsorRuntime;
 }
 
-export function getWorkspaceForIssue(issueId: string) {
+export function getWorkspaceForIssue(issueId: string): IssueWorkspace {
   const runtime = getSponsorRuntime();
   const issue =
     runtime.canonicalIssues.find((candidate) => candidate.id === issueId) ?? runtime.canonicalIssues[0];
@@ -62,7 +67,9 @@ export function getWorkspaceForIssue(issueId: string) {
     steps: runtime.agentSteps.filter((step) => step.agentRunId === run.id),
     artifacts: runtime.validationArtifacts.filter((artifact) => artifact.agentRunId === run.id),
     pr: runtime.pullRequestDrafts.find((draft) => draft.canonicalIssueId === issue.id),
-    learnedProcedure: runtime.learnedProcedures[0],
+    learnedProcedure:
+      runtime.learnedProcedures.find((procedure) => procedure.canonicalIssueId === issue.id) ??
+      runtime.learnedProcedures[0],
     traceTimeline: getTraceTimeline(run.id),
     agentTimeline: runtime.timeline.filter((entry) =>
       runtime.agentSteps.some((step) => step.id === entry.id && step.agentRunId === run.id),

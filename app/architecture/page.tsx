@@ -1,7 +1,9 @@
 import { ArrowRight, CircleCheck } from "lucide-react";
 import { SiteFrame } from "@/components/shared/site-frame";
 import { Badge } from "@/components/ui/badge";
-import { getSponsorRuntime } from "@/lib/sponsor-runtime";
+import { refreshSponsorRuntime } from "@/lib/sponsor-runtime";
+
+export const dynamic = "force-dynamic";
 
 const architecture = [
   { sponsor: "Airbyte", role: "Signals", detail: "Syncs GitHub Issues, GitHub Discussions, and Slack." },
@@ -13,7 +15,7 @@ const architecture = [
 ];
 
 export default function ArchitecturePage() {
-  const runtime = getSponsorRuntime();
+  const runtime = refreshSponsorRuntime();
 
   return (
     <SiteFrame eyebrow="Sponsor architecture" title="Critical path">
