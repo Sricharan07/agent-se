@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 5%;
+  --muted: 0 0% 97%;
+  --muted-foreground: 0 0% 42%;
+  --border: 0 0% 90%;
+  --input: 0 0% 92%;
+  --ring: 0 0% 12%;
+  --accent: 204 100% 40%;
+  --accent-foreground: 0 0% 100%;
+  --font-sans: "Inter", "Geist", Arial, Helvetica, sans-serif;
+  --font-mono: "IBM Plex Mono", "Geist Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: hsl(var(--background));
+}
+
+body {
+  min-height: 100vh;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  text-rendering: geometricPrecision;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(0, 112, 192, 0.14);
+}
+
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
